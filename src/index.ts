@@ -29,7 +29,7 @@ import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { CombinedAutocompleteProvider, type AutocompleteItem, type SlashCommand } from '@earendil-works/pi-tui'
 import { createUserMessage, errorChain, type ToolCallId, type ContentBlock, type LlmConfigurableProvider, type LlmReasoningEffortInfo } from '@deepseek-ai/dsh-llm'
 import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment'
-import { SessionId, type Session, type SessionEvent, type UserMessage } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, type Session, type SessionEvent, type UserMessage } from '@deepseek-ai/dsh-session'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 import { parseSessionReferenceText } from '@deepseek-ai/dsh-session-reference'
@@ -200,7 +200,7 @@ import {
   shellResultFailed,
   type ShellCommandResult,
 } from './shell-command.ts'
-import { filterProjectSessions, sameProject } from './session-filter.ts'
+import { filterProjectSessions, filterResumeSessions, resolveSessionSelector, sameProject } from './session-filter.ts'
 import { foldSessionView, hasConversationData, liveChildSubagents, recordConversationPreset, sessionSubagent } from './session-lifecycle.ts'
 import type { BridgeConfig, WechatBridge } from './wechat/index.ts'
 import { setActiveAgent } from './wechat/dsh/session.ts'
@@ -467,6 +467,7 @@ export class Tui extends Service {
     // Agent-scoped helpers handed to the command surface by mount().
     const handles: {
       newAgent: (() => Promise<SessionId | undefined>) | undefined
+      forkAgent: ((title?: string) => Promise<SessionId | undefined>) | undefined
       switchAgent: ((id: SessionId) => Promise<void>) | undefined
       saveSelection: ((selection: ModelSelection) => Promise<void>) | undefined
       setReasoningEffort: ((effort: NonNullable<ModelSelection['reasoningEffort']>) => Promise<void>) | undefined
@@ -474,6 +475,7 @@ export class Tui extends Service {
       selectionRef: ModelSelectionRef | undefined
     } = {
       newAgent: undefined,
+      forkAgent: undefined,
       switchAgent: undefined,
       saveSelection: undefined,
       setReasoningEffort: undefined,
@@ -1517,18 +1519,87 @@ export class Tui extends Service {
         }
         return
       }
+      if (line === '/fork' || line.startsWith('/fork ')) {
+        const forker = handles.forkAgent
+        if (forker === undefined) return
+        if (current.status === 'running' || isCompacting) {
+          appendNotice(t('noticeForkBusy'), 'warning')
+          return
+        }
+        const title = line.slice('/fork'.length).trim() || undefined
+        try {
+          await forker(title)
+        } catch (error: unknown) {
+          appendNotice(t('noticeSessionForkFailed', { error: errorChain(error) }), 'error')
+        }
+        return
+      }
+      if (line === '/rename' || line.startsWith('/rename ')) {
+        const existingTitle = foldSessionTitle(current.session.snapshotEvents())?.title ?? ''
+        let title = line.slice('/rename'.length).trim()
+        if (title === '') {
+          const picked = await showOverlay<string>(
+            ui,
+            done => new InputDialog(t('renameTitle'), palette, done, t, existingTitle),
+          )
+          if (picked === undefined) return
+          title = picked
+        }
+        try {
+          const renamed = ctx.sessionTitle.rename(current.session, title)
+          appendNotice(t('noticeSessionRenamed', { title: renamed.title }), 'info')
+          ui.requestRender()
+        } catch (error: unknown) {
+          appendNotice(t('noticeSessionRenameFailed', { error: errorChain(error) }), 'error')
+        }
+        return
+      }
       if (line === '/resume' || line.startsWith('/resume ')) {
         const switcher = handles.switchAgent
         if (switcher === undefined) return
         const explicit = line.slice('/resume'.length).trim()
         if (explicit !== '') {
-          await switcher(SessionId(explicit))
+          try {
+            const workspace = current.session.header.cwd ?? process.cwd()
+            const persisted = filterResumeSessions(
+              await ctx.sessionQuery.listSessions(),
+              workspace,
+              current.session.id,
+            )
+            const exactId = persisted.find(record => String(record.header.id) === explicit)
+            if (exactId !== undefined) {
+              await switcher(exactId.header.id)
+              return
+            }
+            const observations = await ctx.sessionQuery.readTitleSnapshots(
+              persisted.map(record => record.header.id),
+            )
+            const titleById = new Map<string, string>()
+            for (const observation of observations) {
+              if (observation.status === 'fulfilled' && observation.value.title !== undefined) {
+                titleById.set(String(observation.sessionId), observation.value.title.title)
+              }
+            }
+            const resolvedTarget = resolveSessionSelector(
+              persisted.map(record => ({ record, title: titleById.get(String(record.header.id)) })),
+              explicit,
+            )
+            if (resolvedTarget.kind === 'found') {
+              await switcher(resolvedTarget.id)
+            } else if (resolvedTarget.kind === 'ambiguous') {
+              appendNotice(t('noticeSessionSelectorAmbiguous', { name: explicit }), 'warning')
+            } else {
+              appendNotice(t('noticeSessionSelectorNotFound', { name: explicit }), 'warning')
+            }
+          } catch (error: unknown) {
+            appendNotice(t('noticeSessionListFailed', { error: errorChain(error) }), 'error')
+          }
           return
         }
         try {
           const records = await ctx.sessionQuery.listSessions()
           const workspace = current.session.header.cwd ?? process.cwd()
-          const persisted = filterProjectSessions(records, workspace)
+          const persisted = filterResumeSessions(records, workspace, current.session.id)
             .sort((left, right) => (right.header.createdAt ?? 0) - (left.header.createdAt ?? 0))
             .slice(0, RESUME_PICKER_LIMIT)
           if (persisted.length === 0) {
@@ -3020,7 +3091,9 @@ export class Tui extends Service {
           `/model — ${t('helpModel')}`,
           `/think [level] — ${t('helpThink')}`,
           `/new — ${t('helpNew')}`,
-          `/resume — ${t('helpResume')}`,
+          `/fork [name] — ${t('helpFork')}`,
+          `/rename [name] — ${t('helpRename')}`,
+          `/resume [sessionId|name] — ${t('helpResume')}`,
           `/copy — ${t('helpCopy')}`,
           `/reload — ${t('helpReload')}`,
           `/details — ${t('helpDetails')}`,
@@ -3337,6 +3410,11 @@ export class Tui extends Service {
         editor,
         composerMounted && inlineQuestionDepth === 0 && !subagentPanel.isExpanded(),
       )
+      // Capturing overlays (resume/model/settings/question dialogs) own their
+      // keystrokes. App-wide background navigation must not swallow Enter,
+      // arrows, or Escape before pi-tui dispatches them to the focused overlay.
+      const focused = ui.getFocusedComponent()
+      if (focused !== null && focused !== editor) return
       const viewingBackgroundTask = backgroundJobId !== undefined
         || (navigationOwner !== undefined && agent !== navigationOwner)
       if (subagentPanel.isExpanded()) {
@@ -3581,20 +3659,35 @@ export class Tui extends Service {
           },
         },
         { name: 'new', description: t('cmdNew') },
+        { name: 'fork', description: t('cmdFork'), argumentHint: '[name]' },
+        { name: 'rename', description: t('cmdRename'), argumentHint: '[name]' },
         { name: 'copy', description: t('cmdCopy') },
         { name: 'reload', description: t('cmdReload') },
         {
           name: 'resume',
           description: t('cmdResume'),
-          argumentHint: '<sessionId>',
+          argumentHint: '<sessionId|name>',
           getArgumentCompletions: async (prefix) => {
             try {
               const records = await ctx.sessionQuery.listSessions()
-              const options: AutocompleteItem[] = filterProjectSessions(records, workspace)
+              const current = agent ?? liveAgent
+              const activeWorkspace = current.session.header.cwd ?? process.cwd()
+              const persisted = filterResumeSessions(records, activeWorkspace, current.session.id)
+              const observations = await ctx.sessionQuery.readTitleSnapshots(
+                persisted.map(record => record.header.id),
+              )
+              const titleById = new Map<string, string>()
+              for (const observation of observations) {
+                if (observation.status === 'fulfilled' && observation.value.title !== undefined) {
+                  titleById.set(String(observation.sessionId), observation.value.title.title)
+                }
+              }
+              const options: AutocompleteItem[] = persisted
                 .map(record => {
                   const id = String(record.header.id)
                   const created = new Date(record.header.createdAt ?? 0).toLocaleString()
-                  return { value: id, label: id, description: created }
+                  const title = titleById.get(id)
+                  return { value: id, label: title === undefined ? id : `${title} — ${id}`, description: created }
                 })
               return filterCommandOptions(options, prefix)
             } catch {
@@ -4057,6 +4150,50 @@ export class Tui extends Service {
         appendNotice(t('noticeSessionCreated', { id: String(id) }), 'info')
         return id
       }
+
+      const forkAgent = async (requestedTitle?: string): Promise<SessionId | undefined> => {
+        const current = agent ?? liveAgent
+        const selection = selectionRef.current ?? selectionFor(current)
+        const preset = uiMode
+        const id = SessionId(`tui-${crypto.randomUUID()}`)
+        const seed = current.session.snapshotEvents()
+        const handle = await ctx.agents.create({
+          sessionId: id,
+          seed,
+          inheritedEventCount: SessionLogOffset(seed.length),
+          meta: {
+            cwd: current.session.header.cwd ?? process.cwd(),
+            parentSession: current.session.id,
+            isSeeded: true,
+            agentPreset: preset,
+          },
+          agentOptions: {
+            ...current.options,
+            provider: selection.provider,
+            model: selection.model,
+          },
+          setup: async (agentCtx) => { await ctx.agentPresets.mount(agentCtx, preset) },
+        })
+        try {
+          const currentPermission = ctx.permissionPresets.current(current.session)
+          if (currentPermission !== 'custom') {
+            try {
+              ctx.permissionPresets.set(handle.agent.session, currentPermission)
+            } catch {
+              // If the preset cannot be applied, the fork keeps the default.
+            }
+          }
+          const inheritedTitle = foldSessionTitle(current.session.snapshotEvents())?.title
+          const forkTitle = requestedTitle ?? (inheritedTitle === undefined ? undefined : `${inheritedTitle} (fork)`)
+          if (forkTitle !== undefined) ctx.sessionTitle.rename(handle.agent.session, forkTitle)
+        } catch (error: unknown) {
+          await handle.dispose().catch(() => undefined)
+          throw error
+        }
+        activateAgent(handle.agent, handle)
+        appendNotice(t('noticeSessionForked', { id: String(id), parent: String(current.session.id) }), 'info')
+        return id
+      }
       this.createForegroundSessionImpl = createAgent
       setTuiForegroundControl({
         foregroundAgent: () => this.foregroundAgent(),
@@ -4142,6 +4279,7 @@ export class Tui extends Service {
       // initial frame briefly shows Agent creation defaults instead of the
       // selection that will actually route the next request.
       handles.newAgent = createAgent
+      handles.forkAgent = forkAgent
       handles.switchAgent = switchAgent
       handles.saveSelection = saveSelection
       handles.setReasoningEffort = setReasoningEffort

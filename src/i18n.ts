@@ -39,6 +39,8 @@ export type Messages = {
   helpModel: string
   helpThink: string
   helpNew: string
+  helpFork: string
+  helpRename: string
   helpResume: string
   helpCopy: string
   helpReload: string
@@ -56,6 +58,8 @@ export type Messages = {
   cmdModel: string
   cmdThink: string
   cmdNew: string
+  cmdFork: string
+  cmdRename: string
   cmdResume: string
   cmdCopy: string
   cmdReload: string
@@ -115,6 +119,13 @@ export type Messages = {
   noticeCreatingSession: string
   noticeSessionCreated: string
   noticeSessionCreateFailed: string
+  noticeSessionForked: string
+  noticeSessionForkFailed: string
+  noticeForkBusy: string
+  noticeSessionRenamed: string
+  noticeSessionRenameFailed: string
+  noticeSessionSelectorAmbiguous: string
+  noticeSessionSelectorNotFound: string
   noticeSessionResumed: string
   noticeResumeFailed: string
   noticeResumeTimeout: string
@@ -194,6 +205,7 @@ export type Messages = {
   modelTitle: string
   modelEffort: string
   resumeTitle: string
+  renameTitle: string
   settingsTitle: string
   settingsHint: string
   settingsSubmenuHint: string
@@ -343,6 +355,8 @@ export const MESSAGES: Record<Locale, Messages> = {
     helpModel: '选择 provider / model / 推理强度',
     helpThink: '切换当前模型的思考等级',
     helpNew: '新建会话',
+    helpFork: '从当前完整回合创建分支会话',
+    helpRename: '重命名当前会话',
     helpResume: '恢复持久化会话',
     helpCopy: '复制最近一条助手回复',
     helpReload: '重启进程重载 Profile 插件并续接当前会话',
@@ -359,6 +373,8 @@ export const MESSAGES: Record<Locale, Messages> = {
     cmdModel: '选择 provider / model / 推理强度',
     cmdThink: '切换当前模型的思考等级',
     cmdNew: '新建会话',
+    cmdFork: '从当前会话创建分支',
+    cmdRename: '重命名当前会话',
     cmdSettings: '打开可视化设置',
     cmdContext: '查看上下文窗口用量',
     cmdJobs: '查看后台任务',
@@ -417,6 +433,13 @@ export const MESSAGES: Record<Locale, Messages> = {
     noticeCreatingSession: '正在创建新会话…',
     noticeSessionCreated: '已新建会话 {id}。',
     noticeSessionCreateFailed: '新建会话失败：{error}',
+    noticeSessionForked: '已从 {parent} 创建分支会话 {id}。',
+    noticeSessionForkFailed: '创建分支会话失败：{error}',
+    noticeForkBusy: '当前回合尚未结束，暂时无法创建分支。',
+    noticeSessionRenamed: '会话已重命名为“{title}”。',
+    noticeSessionRenameFailed: '重命名会话失败：{error}',
+    noticeSessionSelectorAmbiguous: '名称“{name}”对应多个会话，请改用会话 ID。',
+    noticeSessionSelectorNotFound: '未找到会话 ID 或名称“{name}”。',
     noticeSessionResumed: '会话 {id} 已恢复。',
     noticeResumeFailed: '会话恢复失败：{error}',
     noticeResumeTimeout: '会话恢复超时，已取消本次恢复。',
@@ -495,6 +518,7 @@ export const MESSAGES: Record<Locale, Messages> = {
     modelTitle: '模型 · {provider}',
     modelEffort: '推理强度',
     resumeTitle: '恢复会话',
+    renameTitle: '重命名会话',
     settingsTitle: '设置',
     settingsHint: '↑/↓ 选择 · ←/→/Tab 切换标签 · Enter/Space 修改 · Esc 关闭',
     settingsSubmenuHint: '↑/↓ 选择 · Enter 确认 · Esc 返回',
@@ -641,6 +665,8 @@ export const MESSAGES: Record<Locale, Messages> = {
     helpModel: 'pick a provider/model/reasoning effort',
     helpThink: 'switch the current model reasoning effort',
     helpNew: 'start a new session',
+    helpFork: 'fork the current completed conversation',
+    helpRename: 'rename the current session',
     helpResume: 'resume a persisted session',
     helpCopy: 'copy the latest assistant response',
     helpReload: 'restart the process to reload profile plugins and resume this session',
@@ -657,6 +683,8 @@ export const MESSAGES: Record<Locale, Messages> = {
     cmdModel: 'Pick a provider/model/reasoning effort',
     cmdThink: 'Switch the current model reasoning effort',
     cmdNew: 'Start a new session',
+    cmdFork: 'Fork the current session',
+    cmdRename: 'Rename the current session',
     cmdResume: 'Resume a persisted session',
     cmdCopy: 'Copy the latest assistant response',
     cmdReload: 'Restart the process to reload profile plugins and resume this session',
@@ -715,6 +743,13 @@ export const MESSAGES: Record<Locale, Messages> = {
     noticeCreatingSession: 'Creating a new session…',
     noticeSessionCreated: 'Started session {id}.',
     noticeSessionCreateFailed: 'Failed to create session: {error}',
+    noticeSessionForked: 'Forked session {id} from {parent}.',
+    noticeSessionForkFailed: 'Failed to fork session: {error}',
+    noticeForkBusy: 'Cannot fork while the current turn is still running.',
+    noticeSessionRenamed: 'Session renamed to “{title}”.',
+    noticeSessionRenameFailed: 'Failed to rename session: {error}',
+    noticeSessionSelectorAmbiguous: 'The name “{name}” matches multiple sessions; use a session ID.',
+    noticeSessionSelectorNotFound: 'No session ID or name matches “{name}”.',
     noticeSessionResumed: 'Session {id} resumed.',
     noticeResumeFailed: 'Failed to resume session: {error}',
     noticeResumeTimeout: 'Session resume timed out and was cancelled.',
@@ -793,6 +828,7 @@ export const MESSAGES: Record<Locale, Messages> = {
     modelTitle: 'Model · {provider}',
     modelEffort: 'Reasoning effort',
     resumeTitle: 'Resume session',
+    renameTitle: 'Rename session',
     settingsTitle: 'Settings',
     settingsHint: '↑/↓ select · ←/→/Tab switch tabs · Enter/Space change · Esc close',
     settingsSubmenuHint: '↑/↓ select · Enter confirm · Esc go back',

@@ -140,8 +140,8 @@ try {
   }
 
   writeFileSync(join(harnessRoot, 'package.json'), '{"private":true,"type":"module"}')
-  const harnessPackages = ['add', 'node-pty@1.1.0', '@xterm/headless@5.5.0']
-  if (values['keep-artifacts']) harnessPackages.push('sharp@0.34.5')
+  const harnessPackages = ['add', 'node-pty@1.1.0', '@xterm/headless@5.5.0', '--allow-build=node-pty']
+  if (values['keep-artifacts']) harnessPackages.push('sharp@0.34.5', '--allow-build=sharp')
   run('pnpm', harnessPackages, {
     cwd: harnessRoot,
     logPath: join(artifacts, 'install-harness.log'),

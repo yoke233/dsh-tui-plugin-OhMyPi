@@ -15,5 +15,8 @@ export default defineConfig({
   fixedExtension: false,
   dts: false,
   clean: false,
-  external: [/^@deepseek-ai\//],
+  deps: {
+    neverBundle: [/^@deepseek-ai\//],
+    onlyBundle: false,
+  },
 })

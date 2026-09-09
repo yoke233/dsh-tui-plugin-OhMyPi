@@ -1,7 +1,7 @@
 {
   "name": "@yoke233/omdsh",
   "description": "OMP-styled interactive terminal profile bundle for DeepSeek Harness",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "publishConfig": {
     "access": "public"
   },
@@ -266,10 +266,10 @@
     "@deepseek-ai/dsh-user-approval": "0.1.2-rc.1",
     "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1",
     "@deepseek-ai/schemastery": "3.18.2",
-    "@earendil-works/pi-tui": "0.84.4",
+    "@earendil-works/pi-tui": "0.85.1",
     "@types/node": "26.4.1",
     "commander": "^15.0.0",
-    "tsdown": "^0.22.2",
+    "tsdown": "^0.23.0",
     "typescript": "7.0.2"
   },
   "dsh": {

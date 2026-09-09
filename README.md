@@ -146,7 +146,7 @@ dsh --profile tui --dump-config
 | `!<command>` | 用 Profile 当前平台 shell 执行命令（Windows PowerShell、POSIX bash）；结果持久显示为 shell 卡，并作为用户消息开启下一轮 agent 会话 |
 | `/help` | 查看运行中实例的完整命令与快捷键 |
 | `/model` | 选择 provider、model 和思考等级 |
-| `/new` · `/resume [id]` | 新建或恢复持久化会话 |
+| `/new` · `/fork [name]` · `/rename [name]` · `/resume [id|name]` | 新建、分支、重命名或恢复持久化会话 |
 | `/reload` | 重启插件运行时并续接当前会话（需经 `omdsh` 启动；回合运行中会要求先等待结束） |
 | `/mode [preset]` | 切换官方 `ctx.agentPresets` roster 中的健康 preset（含本地安装项） |
 | `/permission [preset]` | 切换沙箱与审批策略 |

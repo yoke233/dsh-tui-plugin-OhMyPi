@@ -512,8 +512,11 @@ abstract class SessionQueryEngine extends Service {
 ```
 
 - 过滤器：`{kind:'id'|'cwd'|'created-at'|'parent'|'availability'}` / 事件 `{kind:'seq'|'time'|'type'|'surface'|'text'}`；AND 语义、同子句 OR。
-- TUI 消费：`/resume` 列表用 `listSessions()`，保留当前项目中已持久化且 `header.origin !== 'subagent'` 的顶层会话，再用
-  `readTitleSnapshots` 读取标题；预览用 `readSurface`。错误码闭集 18 个 `SESSION_QUERY_*`。
+- TUI 消费：`/resume` 列表用 `listSessions()`，保留当前项目中已持久化、`header.origin !== 'subagent'` 且不是当前活动会话的顶层会话，再用
+  `readTitleSnapshots` 读取标题；显式参数优先按 session id 匹配，再按规范化后的唯一标题匹配，重名时要求改用 id。预览用 `readSurface`。错误码闭集 18 个 `SESSION_QUERY_*`。
+- TUI 的 `/rename` 直接调用 `ctx.sessionTitle.rename(liveSession, title)`，标题仍以 `session/title` 事件为唯一真相源。`/fork` 通过
+  `ctx.agents.create` 的原生 `seed + inheritedEventCount + meta.parentSession/isSeeded` 创建 Agent 所有的分支生命周期；不能先调用会立即发布裸会话的
+  `ctx.sessions.fork` 再为同一 id 创建 Agent，否则会违反 Agent 工厂的单一会话所有权与 id 碰撞边界。
 
 ---
 
