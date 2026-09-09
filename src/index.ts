@@ -3376,9 +3376,9 @@ export class Tui extends Service {
       })
     }
 
-    // With a running turn, Ctrl+C clears a non-empty draft first; on an
-    // empty draft it cancels and recalls queued steer text. While idle, the
-    // existing double-press exit gesture remains unchanged.
+    // Ctrl+C clears a non-empty draft first. With a running turn, an empty
+    // draft cancels and recalls queued steer text; while idle, an empty draft
+    // keeps the existing double-press exit gesture.
     let exitArmed = false
     let exitArmTimer: NodeJS.Timeout | undefined
     const EXIT_ARM_WINDOW_MS = 2000

@@ -1,6 +1,6 @@
 # @yoke233/omdsh 合约速查表（contracts.md）
 
-> dsh 0.1.2-alpha.2 唯一真相源。类型文本逐字引自 npm 安装包
+> dsh 0.1.2-rc.1 唯一真相源。类型文本逐字引自 npm 安装包
 > `@deepseek-ai/*/lib/types/*.d.ts`。本文件是 TUI bundle 消费 harness 服务的地图；
 > 上游接口变更时先更新本表再改代码。
 > 包根：`node_modules/@deepseek-ai`（本仓库 pnpm 安装）与全局 dsh 安装目录中的 `node_modules/@deepseek-ai`
@@ -435,7 +435,7 @@ tool-todo、tool-goal、tool-ralph、tool-str-replace-editor、repeat-tool-remin
 
 → TUI bundle 的 patch 只需**覆盖** `agent-loop`/`system-prompt`/`llm-deepseek`/`fs-sandbox`/`tools`
 行 + **插入** session-reference/tmux-context/tui 行。storage 三件套与 session-projection-cache
-由 0.1.2-alpha.2 的官方 base 提供，TUI 不得重复插入。
+由 0.1.2-rc.1 的官方 base 提供，TUI 不得重复插入。
 
 可选的独立 `dsh-web-access` bundle 安装在 `tui` Profile 后层：禁用 base 的
 `web-search-deepseek` 与 `tool-web`，保留 `web` seam 并把 search/fetch provider 固定为
@@ -444,7 +444,7 @@ tool-todo、tool-goal、tool-ralph、tool-str-replace-editor、repeat-tool-remin
 
 ---
 
-## 6. 会话持久化/投影/查询（0.1.2-alpha.2 合约）
+## 6. 会话持久化/投影/查询（0.1.2-rc.1 合约）
 
 ### 6.1 SessionPersistence（`ctx.sessionPersistence`，抽象服务）
 
@@ -463,6 +463,19 @@ abstract class SessionPersistence extends Service {
   abstract listSnapshots(signal?): Promise<SessionPersistenceSnapshot[]>;
 }
 ```
+
+JSONL 具体后端另暴露给同 Profile 包装层的稳定读取原语：
+
+```ts
+loadStored(id, signal?): Promise<StoredPrefix | undefined>;
+readStoredRevision(id, signal?): Promise<SessionPersistenceRevision | undefined>;
+// StoredPrefix = { meta, inheritedEventCount, events, revision, tornMarker? }
+```
+
+`session-persistence-conversation-gate` 仍不放宽上游连续性校验。它只在 `loadStored` 抛出精确的 committed-region
+`seq gap` 错误时，使用 `readRaw` + 前后相同的 `readStoredRevision` 重读稳定快照；仅允许发生在 `turn/end` 后的
+小型前向缺口（最多 8 处、合计 64 个序号），并在内存中填入带 `ignorable: true` 的
+`omdsh/legacy-sequence-gap` 标记。物理日志不改写，后续追加沿用原序号空间；回合内部、逆向或超限缺口继续失败。
 
 ### 6.2 SessionProjectionRegistry（`ctx.sessionProjections`）
 

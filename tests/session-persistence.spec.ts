@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { Session, SessionId, SessionLogOffset, SESSION_FORMAT_VERSION, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { ConversationWriteGate, repairLegacyToolEvents } from '../src/session-persistence.ts'
+import { ConversationWriteGate, repairLegacySequenceGaps, repairLegacyToolEvents } from '../src/session-persistence.ts'
 
 function event(seq: number, type: string): SessionEvent {
   return { seq, time: seq, type, data: {} } as SessionEvent
@@ -87,5 +87,72 @@ describe('conversation-gated persistence', () => {
     const result = session.snapshotEvents()[1] as { data: { message: { source: { callId: string }; content: [{ toolCallId: string }] } } }
     assert.equal(result.data.message.source.callId, 'call-0')
     assert.equal(result.data.message.content[0].toolCallId, 'call-0')
+  })
+
+  it('fills a bounded committed sequence gap with ignorable compatibility events', () => {
+    const id = SessionId('repair-sequence-gap')
+    const events = [
+      {
+        type: 'turn/end',
+        seq: 0,
+        time: 10,
+        data: { turn: 1, reason: { kind: 'interrupted' } },
+      },
+      {
+        type: 'step/start',
+        seq: 3,
+        time: 20,
+        data: { turn: 2, step: 1 },
+      },
+      {
+        type: 'step/end',
+        seq: 4,
+        time: 21,
+        data: { turn: 2, step: 1 },
+      },
+      {
+        type: 'turn/end',
+        seq: 5,
+        time: 22,
+        data: { turn: 2, reason: { kind: 'error', error: { message: 'legacy failure', code: 'UNKNOWN' } } },
+      },
+    ] as unknown as SessionEvent[]
+
+    const repaired = repairLegacySequenceGaps(events) as SessionEvent[]
+    assert.deepEqual(repaired.map(item => item.seq), [0, 1, 2, 3, 4, 5])
+    assert.deepEqual(repaired.slice(1, 3).map(item => ({
+      type: item.type,
+      ignorable: item.ignorable,
+      data: item.data,
+    })), [
+      {
+        type: 'omdsh/legacy-sequence-gap',
+        ignorable: true,
+        data: { fromSeq: 1, toSeq: 2, nextType: 'step/start' },
+      },
+      {
+        type: 'omdsh/legacy-sequence-gap',
+        ignorable: true,
+        data: { fromSeq: 1, toSeq: 2, nextType: 'step/start' },
+      },
+    ])
+
+    const session = Session.fromRestore(id, repaired, {
+      version: SESSION_FORMAT_VERSION,
+      id,
+      createdAt: 0,
+      isSeeded: false,
+    }, SessionLogOffset(0))
+    assert.equal(session.snapshotEvents().length, 7)
+  })
+
+  it('refuses to guess across a sequence gap inside an unfinished turn', () => {
+    assert.throws(
+      () => repairLegacySequenceGaps([
+        event(0, 'step/start'),
+        event(2, 'assistant/chunk'),
+      ]),
+      /cannot safely repair sequence gap/,
+    )
   })
 })

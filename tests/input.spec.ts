@@ -2,20 +2,23 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { restoreComposerFocus, runningTurnKeyAction } from '../src/input.ts'
 
-describe('running turn keyboard input', () => {
+describe('composer keyboard input', () => {
   it('maps Escape and Ctrl+C on an empty draft to cancellation', () => {
     assert.equal(runningTurnKeyAction('\x1b', 'running', true, ''), 'cancel')
     assert.equal(runningTurnKeyAction('\x03', 'running', true, ''), 'cancel')
   })
 
-  it('clears a non-empty running draft on Ctrl+C without cancelling', () => {
+  it('clears a non-empty draft on Ctrl+C without cancelling or exiting', () => {
+    assert.equal(runningTurnKeyAction('\x03', 'idle', true, 'idle draft'), 'clear-draft')
     assert.equal(runningTurnKeyAction('\x03', 'running', true, 'keep running'), 'clear-draft')
     assert.equal(runningTurnKeyAction('\x03', 'running', true, ' '), 'clear-draft')
     assert.equal(runningTurnKeyAction('\x1b', 'running', true, 'draft'), 'cancel')
   })
 
-  it('leaves keys to the focused surface when idle or outside the composer', () => {
+  it('leaves empty idle Ctrl+C and keys outside the composer to other handlers', () => {
+    assert.equal(runningTurnKeyAction('\x03', 'idle', true, ''), undefined)
     assert.equal(runningTurnKeyAction('\x1b', 'idle', true, ''), undefined)
+    assert.equal(runningTurnKeyAction('\x03', 'idle', false, 'dialog draft'), undefined)
     assert.equal(runningTurnKeyAction('\x1b', 'running', false, ''), undefined)
     assert.equal(runningTurnKeyAction('x', 'running', true, ''), undefined)
   })

@@ -23,15 +23,16 @@ export function restoreComposerFocus<T>(
   return true
 }
 
-/** Resolve Ctrl+C/Escape without letting a non-empty draft stop the running turn. */
+/** Resolve Ctrl+C/Escape without letting a non-empty draft cancel or exit. */
 export function runningTurnKeyAction(
   data: string,
   status: AgentStatus | undefined,
   editorFocused: boolean,
   draft: string,
 ): RunningTurnKeyAction | undefined {
-  if (!editorFocused || status !== 'running') return undefined
-  if (matchesKey(data, 'ctrl+c')) return draft === '' ? 'cancel' : 'clear-draft'
-  if (matchesKey(data, 'escape')) return 'cancel'
+  if (!editorFocused) return undefined
+  if (matchesKey(data, 'ctrl+c') && draft !== '') return 'clear-draft'
+  if (status !== 'running') return undefined
+  if (matchesKey(data, 'ctrl+c') || matchesKey(data, 'escape')) return 'cancel'
   return undefined
 }
